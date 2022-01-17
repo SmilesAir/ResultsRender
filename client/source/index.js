@@ -20,21 +20,6 @@ require("./index.less")
         super()
 
         Common.downloadPlayerAndManifestData()
-
-        // MainStore.rankingData = [
-        //     {
-        //         rank: 1,
-        //         name: "Ryan Young",
-        //         points: 1700,
-        //         events: 30
-        //     },
-        //     {
-        //         rank: 2,
-        //         name: "James Wiseman",
-        //         points: 1600,
-        //         events: 32
-        //     }
-        // ]
     }
 
     render() {
