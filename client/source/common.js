@@ -13,7 +13,7 @@ module.exports.fetchEx = function(key, pathParams, queryParams, options) {
 }
 
 module.exports.downloadPlayerAndManifestData = function() {
-    Common.fetchEx("GET_PLAYER_DATA", {}, {}, {
+    let playerPromise = Common.fetchEx("GET_PLAYER_DATA", {}, {}, {
         method: "GET",
         headers: {
             "Content-Type": "application/json"
@@ -34,7 +34,7 @@ module.exports.downloadPlayerAndManifestData = function() {
         console.error(`Failed to download Player data: ${error}`)
     })
 
-    Common.fetchEx("GET_EVENT_DATA", {}, {}, {
+    let eventPromise = Common.fetchEx("GET_EVENT_DATA", {}, {}, {
         method: "GET",
         headers: {
             "Content-Type": "application/json"
@@ -49,7 +49,22 @@ module.exports.downloadPlayerAndManifestData = function() {
         console.error(`Failed to download Event data: ${error}`)
     })
 
-    Common.fetchEx("GET_POINTS_MANIFEST", {}, {}, {
+    let resultsPromise = Common.fetchEx("GET_RESULTS_DATA", {}, {}, {
+        method: "GET",
+        headers: {
+            "Content-Type": "application/json"
+        }
+    }).then((data) => {
+        MainStore.resultsData = data.results
+
+        ++MainStore.initCount
+
+        console.log("resultsData", JSON.parse(JSON.stringify(MainStore.resultsData)))
+    }).catch((error) => {
+        console.error(`Failed to download Results data: ${error}`)
+    })
+
+    let manifestPromise = Common.fetchEx("GET_POINTS_MANIFEST", {}, {}, {
         method: "GET",
         headers: {
             "Content-Type": "application/json"
@@ -60,10 +75,12 @@ module.exports.downloadPlayerAndManifestData = function() {
         ++MainStore.initCount
 
         console.log("manifest", JSON.parse(JSON.stringify(data.manifest)))
-
-        downloadLatestPointsData()
     }).catch((error) => {
         console.error(`Failed to download Manifest data: ${error}`)
+    })
+
+    Promise.all([ playerPromise, eventPromise, resultsPromise, manifestPromise ]).then(() => {
+        downloadLatestPointsData()
     })
 }
 
@@ -100,11 +117,26 @@ function downloadLatestPointsData() {
             }).then((data) => {
                 console.log(filename, data)
 
-                for (let player of data.data) {
-                    player.points = Math.round(player.points)
-                }
+                if (filename.startsWith("ranking")) {
+                    for (let player of data.data) {
+                        player.points = Math.round(player.points)
+                        for (let i = 0; i < MainStore.topRankingResultsCount && i < player.pointsList.length; ++i) {
+                            let resultData = MainStore.resultsData[player.pointsList[i].resultsId]
+                            player[`event${i + 1}`] = `${resultData.eventName}, ${resultData.divisionName}: ${Math.round(player.pointsList[i].points)}`
+                        }
+                    }
 
-                MainStore.rankingData[key] = data.data
+                    MainStore.rankingData[key] = data.data
+                } else {
+                    let rank = 1
+                    for (let player of data.data) {
+                        player.rating = Math.round(player.rating)
+                        player.highestRating = Math.round(player.highestRating)
+                        player.rank = rank++
+                    }
+
+                    MainStore.ratingData[key] = data.data
+                }
             }).catch((error) => {
                 console.error(`Failed to download Manifest data: ${error}`)
             })

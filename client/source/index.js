@@ -14,7 +14,6 @@ const Common = require("common.js")
 
 require("./index.less")
 
-
 @MobxReact.observer class Main extends React.Component {
     constructor() {
         super()
@@ -23,7 +22,7 @@ require("./index.less")
     }
 
     render() {
-        let hasAllData = MainStore.rankingData["ranking-open"] !== undefined && MainStore.rankingData["ranking-women"] !== undefined
+        let hasAllData = MainStore.rankingData["ranking-open"] !== undefined && MainStore.rankingData["ranking-women"] !== undefined && MainStore.ratingData["rating-open"] !== undefined
         if (hasAllData) {
             return (
                 <div>
@@ -36,6 +35,9 @@ require("./index.less")
                                 Women
                             </Tab>
                             <Tab>
+                                Rating
+                            </Tab>
+                            <Tab>
                                 Open Detailed
                             </Tab>
                             <Tab>
@@ -44,12 +46,27 @@ require("./index.less")
                         </TabList>
                         <TabPanel>
                             <Styles>
-                                <RankingTable rankingDataName="ranking-open" />
+                                <RankingTable dataName="ranking-open" />
                             </Styles>
                         </TabPanel>
                         <TabPanel>
                             <Styles>
-                                <RankingTable rankingDataName="ranking-women" />
+                                <RankingTable dataName="ranking-women" />
+                            </Styles>
+                        </TabPanel>
+                        <TabPanel>
+                            <Styles>
+                                <RatingTable dataName="rating-open" />
+                            </Styles>
+                        </TabPanel>
+                        <TabPanel>
+                            <Styles>
+                                <RankingTable dataName="ranking-open" isDetailed={true} />
+                            </Styles>
+                        </TabPanel>
+                        <TabPanel>
+                            <Styles>
+                                <RankingTable dataName="ranking-women" isDetailed={true} />
                             </Styles>
                         </TabPanel>
                     </Tabs>
@@ -90,10 +107,10 @@ const Styles = styled.div`
   }
 `
 
-function RankingTable({ rankingDataName }) {
-    const data = React.useMemo(() => MainStore.rankingData[rankingDataName], [])
+function RankingTable({ dataName, isDetailed }) {
+    const data = React.useMemo(() => MainStore.rankingData[dataName], [])
 
-    const columns = React.useMemo(
+    let columns = React.useMemo(
         () => [
             {
                 Header: "Rank",
@@ -118,6 +135,61 @@ function RankingTable({ rankingDataName }) {
         []
     )
 
+    if (isDetailed) {
+        for (let i = 1; i <= MainStore.topRankingResultsCount; ++i) {
+            columns.push({
+                Header: `Event ${i}`,
+                accessor: `event${i}`,
+                sortDescFirst: true
+            })
+        }
+    }
+
+    return resultsTable(columns, data)
+}
+
+function RatingTable({ dataName }) {
+    const data = React.useMemo(() => MainStore.ratingData[dataName], [])
+
+    let columns = React.useMemo(
+        () => [
+            {
+                Header: "#",
+                accessor: "rank",
+                sortDescFirst: true
+            },
+            {
+                Header: "Name",
+                accessor: "fullName"
+            },
+            {
+                Header: "Rating",
+                accessor: "rating",
+                sortDescFirst: true
+            },
+            {
+                Header: "Matches",
+                accessor: "matchCount",
+                sortDescFirst: true
+            },
+            {
+                Header: "Peak Rating",
+                accessor: "highestRating",
+                sortDescFirst: true
+            },
+            {
+                Header: "Peak Rating Date",
+                accessor: "highestRatingDate",
+                sortDescFirst: true
+            }
+        ],
+        []
+    )
+
+    return resultsTable(columns, data)
+}
+
+function resultsTable(columns, data) {
     const {
         getTableProps,
         getTableBodyProps,
@@ -137,8 +209,8 @@ function RankingTable({ rankingDataName }) {
                                 <span>
                                     {column.isSorted ?
                                         column.isSortedDesc ?
-                                            " 🔽" :
-                                            " 🔼" :
+                                            " \u2B07" :
+                                            " \u2B06" :
                                         ""}
                                 </span>
                             </th>
