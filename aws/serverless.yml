@@ -79,4 +79,14 @@ resources:
               ## An identifier for the origin which must be unique within the distribution
               Id: myS3Origin
               S3OriginConfig:
-                OriginAccessIdentity: origin-access-identity/cloudfront/EFW5JY69AHABB
+                OriginAccessIdentity:
+                  Fn::Join:
+                    - ''
+                    -
+                      - 'origin-access-identity/cloudfront/'
+                      - Ref: cloudfrontoriginaccessidentity
+    cloudfrontoriginaccessidentity:
+      Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+      Properties:
+        CloudFrontOriginAccessIdentityConfig:
+          Comment: "Public"

@@ -84,6 +84,13 @@ module.exports.downloadPlayerAndManifestData = function() {
     })
 }
 
+function dateFromString(str) {
+    let a = str.split(/[^0-9]/).map((s) => {
+        return parseInt(s, 10)
+    })
+    return new Date(a[0], a[1] - 1 || 0, a[2] || 1, a[3] || 0, a[4] || 0, a[5] || 0, a[6] || 0)
+}
+
 function downloadLatestPointsData() {
     let manifestData = {}
     for (let key in MainStore.pointsManifest) {
@@ -102,7 +109,8 @@ function downloadLatestPointsData() {
 
     for (let key in manifestData) {
         let sortedDates = manifestData[key].sort((a, b) => {
-            return Date.parse(b) - Date.parse(a)
+            console.log(dateFromString(a).getTime(), dateFromString(b))
+            return dateFromString(b).getTime() - dateFromString(a).getTime()
         })
 
         if (sortedDates.length > 0) {

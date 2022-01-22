@@ -29,19 +29,19 @@ require("./index.less")
                     <Tabs>
                         <TabList>
                             <Tab>
-                                Open
+                                Open Rankings
                             </Tab>
                             <Tab>
-                                Women
+                                Women Rankings
                             </Tab>
                             <Tab>
-                                Rating
+                                Open Ratings
                             </Tab>
                             <Tab>
-                                Open Detailed
+                                Open Rankings Detailed
                             </Tab>
                             <Tab>
-                                Women Detailed
+                                Women Rankings Detailed
                             </Tab>
                         </TabList>
                         <TabPanel>
