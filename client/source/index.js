@@ -4,6 +4,8 @@
 const React = require("react")
 const ReactDOM = require("react-dom")
 const MobxReact = require("mobx-react")
+const ReactSelect = require("react-select").default
+const { runInAction } = require("mobx")
 import { useTable, useSortBy } from "react-table"
 import styled from "styled-components"
 import { Tab, Tabs, TabList, TabPanel } from "react-tabs"
@@ -18,63 +20,90 @@ require("./index.less")
     constructor() {
         super()
 
-        Common.downloadPlayerAndManifestData()
+        Common.downloadPlayerAndManifestData().then(async() => {
+            Common.parseVersions()
+            if (MainStore.versions.length > 0) {
+                MainStore.selectedVersion = {
+                    label: `Current - ${MainStore.versions[0]}`,
+                    value: MainStore.versions[0]
+                }
+                await Common.downloadPointsData(MainStore.versions[0])
+
+                // Have no idea why this doesn't update automatically
+                this.forceUpdate()
+            }
+        })
+    }
+
+    getVersionOptions() {
+        return MainStore.versions.map((data, i) => {
+            return {
+                label: i === 0 ? `Current - ${data}` : data,
+                value: data
+            }
+        })
+    }
+
+    onSelectVersion(selected) {
+        runInAction(async() => {
+            MainStore.selectedVersion = selected
+            await Common.downloadPointsData(selected.value)
+
+            // A little hacky, but version updates rarely
+            this.forceUpdate()
+        })
     }
 
     render() {
-        let hasAllData = MainStore.rankingData["ranking-open"] !== undefined && MainStore.rankingData["ranking-women"] !== undefined && MainStore.ratingData["rating-open"] !== undefined
-        if (hasAllData) {
-            return (
-                <div>
-                    <Tabs>
-                        <TabList>
-                            <Tab>
-                                Open Rankings
-                            </Tab>
-                            <Tab>
-                                Women Rankings
-                            </Tab>
-                            <Tab>
-                                Open Ratings
-                            </Tab>
-                            <Tab>
-                                Open Rankings Detailed
-                            </Tab>
-                            <Tab>
-                                Women Rankings Detailed
-                            </Tab>
-                        </TabList>
-                        <TabPanel>
-                            <Styles>
-                                <RankingTable dataName="ranking-open" />
-                            </Styles>
-                        </TabPanel>
-                        <TabPanel>
-                            <Styles>
-                                <RankingTable dataName="ranking-women" />
-                            </Styles>
-                        </TabPanel>
-                        <TabPanel>
-                            <Styles>
-                                <RatingTable dataName="rating-open" />
-                            </Styles>
-                        </TabPanel>
-                        <TabPanel>
-                            <Styles>
-                                <RankingTable dataName="ranking-open" isDetailed={true} />
-                            </Styles>
-                        </TabPanel>
-                        <TabPanel>
-                            <Styles>
-                                <RankingTable dataName="ranking-women" isDetailed={true} />
-                            </Styles>
-                        </TabPanel>
-                    </Tabs>
-                </div>
-            )
-        } else {
-            return null
-        }
+        return (
+            <div>
+                <ReactSelect value={MainStore.selectedVersion} onChange={(e) => this.onSelectVersion(e)} options={this.getVersionOptions()} isLoading={MainStore.versions.length === 0} placeholder="Choose Version" />
+                <Tabs>
+                    <TabList>
+                        <Tab>
+                            Open Rankings
+                        </Tab>
+                        <Tab>
+                            Women Rankings
+                        </Tab>
+                        <Tab>
+                            Open Ratings
+                        </Tab>
+                        <Tab>
+                            Open Rankings Detailed
+                        </Tab>
+                        <Tab>
+                            Women Rankings Detailed
+                        </Tab>
+                    </TabList>
+                    <TabPanel>
+                        <Styles>
+                            <RankingTable dataName="ranking-open" />
+                        </Styles>
+                    </TabPanel>
+                    <TabPanel>
+                        <Styles>
+                            <RankingTable dataName="ranking-women" />
+                        </Styles>
+                    </TabPanel>
+                    <TabPanel>
+                        <Styles>
+                            <RatingTable dataName="rating-open" />
+                        </Styles>
+                    </TabPanel>
+                    <TabPanel>
+                        <Styles>
+                            <RankingTable dataName="ranking-open" isDetailed={true} />
+                        </Styles>
+                    </TabPanel>
+                    <TabPanel>
+                        <Styles>
+                            <RankingTable dataName="ranking-women" isDetailed={true} />
+                        </Styles>
+                    </TabPanel>
+                </Tabs>
+            </div>
+        )
     }
 }
 
@@ -106,9 +135,43 @@ const Styles = styled.div`
     }
   }
 `
+function tryGetData(dataName) {
+    if (MainStore.selectedVersion === null || MainStore.selectedVersion === undefined ||
+        MainStore.selectedVersion.value === null || MainStore.selectedVersion.value === undefined) {
+        return {
+            errorElement: <h2>Loading...</h2>
+        }
+    }
+
+    const filename = `${dataName}_${MainStore.selectedVersion.value}`
+    const data = MainStore.cachedPointsData[filename]
+    if (MainStore.versions.length === 0) {
+        return {
+            errorElement: <h2>Loading...</h2>
+        }
+    }
+    if (data === undefined) {
+        if (MainStore.pointsManifest[filename] !== undefined) {
+            return {
+                errorElement: <h2>Loading...</h2>
+            }
+        } else {
+            return {
+                errorElement: <h2>No Ranking Data for Selected Version</h2>
+            }
+        }
+    }
+
+    return {
+        data: data
+    }
+}
 
 function RankingTable({ dataName, isDetailed }) {
-    const data = React.useMemo(() => MainStore.rankingData[dataName], [])
+    let ret = tryGetData(dataName)
+    if (ret.data === undefined) {
+        return ret.errorElement
+    }
 
     let columns = React.useMemo(
         () => [
@@ -145,11 +208,14 @@ function RankingTable({ dataName, isDetailed }) {
         }
     }
 
-    return resultsTable(columns, data)
+    return resultsTable(columns, ret.data)
 }
 
 function RatingTable({ dataName }) {
-    const data = React.useMemo(() => MainStore.ratingData[dataName], [])
+    let ret = tryGetData(dataName)
+    if (ret.data === undefined) {
+        return ret.errorElement
+    }
 
     let columns = React.useMemo(
         () => [
@@ -186,7 +252,7 @@ function RatingTable({ dataName }) {
         []
     )
 
-    return resultsTable(columns, data)
+    return resultsTable(columns, ret.data)
 }
 
 function resultsTable(columns, data) {

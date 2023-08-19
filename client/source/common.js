@@ -12,6 +12,23 @@ module.exports.fetchEx = function(key, pathParams, queryParams, options) {
     })
 }
 
+function isValidText(str) {
+    return str !== undefined && str !== null && str.length > 0
+}
+
+module.exports.getDisplayNameFromPlayerData = function(playerData) {
+    let displayName = ""
+    if (isValidText(playerData.firstName) && isValidText(playerData.lastName)) {
+        displayName = playerData.firstName.toLowerCase() + "_" + playerData.lastName.toLowerCase()
+    } else if (isValidText(playerData.firstName)) {
+        displayName = playerData.firstName.toLowerCase()
+    }else if (isValidText(playerData.lastName)) {
+        displayName = playerData.lastName.toLowerCase()
+    }
+
+    return displayName.replaceAll(" ", "_")
+}
+
 module.exports.downloadPlayerAndManifestData = function() {
     let playerPromise = Common.fetchEx("GET_PLAYER_DATA", {}, {}, {
         method: "GET",
@@ -24,10 +41,8 @@ module.exports.downloadPlayerAndManifestData = function() {
         MainStore.cachedDisplayNames = []
         for (let id in MainStore.playerData) {
             let playerData = MainStore.playerData[id]
-            MainStore.cachedDisplayNames.push(playerData.firstName.toLowerCase() + "_" + playerData.lastName.toLowerCase())
+            MainStore.cachedDisplayNames.push(Common.getDisplayNameFromPlayerData(playerData))
         }
-
-        ++MainStore.initCount
 
         console.log("playerData", data)
     }).catch((error) => {
@@ -42,8 +57,6 @@ module.exports.downloadPlayerAndManifestData = function() {
     }).then((data) => {
         MainStore.eventData = data.allEventSummaryData
 
-        ++MainStore.initCount
-
         console.log("eventData", data)
     }).catch((error) => {
         console.error(`Failed to download Event data: ${error}`)
@@ -56,8 +69,6 @@ module.exports.downloadPlayerAndManifestData = function() {
         }
     }).then((data) => {
         MainStore.resultsData = data.results
-
-        ++MainStore.initCount
 
         console.log("resultsData", JSON.parse(JSON.stringify(MainStore.resultsData)))
     }).catch((error) => {
@@ -72,16 +83,12 @@ module.exports.downloadPlayerAndManifestData = function() {
     }).then((data) => {
         MainStore.pointsManifest = data.manifest
 
-        ++MainStore.initCount
-
         console.log("manifest", JSON.parse(JSON.stringify(data.manifest)))
     }).catch((error) => {
         console.error(`Failed to download Manifest data: ${error}`)
     })
 
-    Promise.all([ playerPromise, eventPromise, resultsPromise, manifestPromise ]).then(() => {
-        downloadLatestPointsData()
-    })
+    return Promise.all([ playerPromise, eventPromise, resultsPromise, manifestPromise ])
 }
 
 function dateFromString(str) {
@@ -91,7 +98,7 @@ function dateFromString(str) {
     return new Date(a[0], a[1] - 1 || 0, a[2] || 1, a[3] || 0, a[4] || 0, a[5] || 0, a[6] || 0)
 }
 
-function downloadLatestPointsData() {
+module.exports.parseVersions = function() {
     let manifestData = {}
     for (let key in MainStore.pointsManifest) {
         let splits = key.split("_")
@@ -107,51 +114,54 @@ function downloadLatestPointsData() {
         }
     }
 
-    for (let key in manifestData) {
-        let sortedDates = manifestData[key].sort((a, b) => {
-            console.log(dateFromString(a).getTime(), dateFromString(b))
-            return dateFromString(b).getTime() - dateFromString(a).getTime()
-        })
+    let rankingManifestData = manifestData["ranking-open"]
+    let sortedDates = rankingManifestData.sort((a, b) => {
+        return dateFromString(b).getTime() - dateFromString(a).getTime()
+    })
 
-        if (sortedDates.length > 0) {
-            let filename = `${key}_${sortedDates[0]}`
-            Common.fetchEx("GET_POINTS_DATA", {
-                key: filename
-            }, {}, {
-                method: "GET",
-                headers: {
-                    "Content-Type": "application/json"
-                }
-            }).then((data) => {
-                console.log(filename, data)
+    // Use ranking-open dates as versions
+    MainStore.versions = sortedDates
+}
 
-                if (filename.startsWith("ranking")) {
-                    for (let player of data.data) {
-                        player.points = Math.round(player.points)
-                        for (let i = 0; i < MainStore.topRankingResultsCount && i < player.pointsList.length; ++i) {
-                            let resultData = MainStore.resultsData[player.pointsList[i].resultsId]
-                            player[`event${i + 1}`] = `${resultData.eventName}, ${resultData.divisionName}: ${Math.round(player.pointsList[i].points)}`
-                        }
-                    }
-
-                    MainStore.rankingData[key] = data.data
-                } else {
-                    let rank = 1
-                    for (let player of data.data) {
-                        player.rating = Math.round(player.rating)
-                        player.highestRating = Math.round(player.highestRating)
-                        player.rank = rank++
-                    }
-
-                    MainStore.ratingData[key] = data.data
-                }
-            }).catch((error) => {
-                console.error(`Failed to download Manifest data: ${error}`)
-            })
-
-        } else {
-            console.error("sortedDates is empty")
+module.exports.downloadPointsData = async function(version) {
+    let pointsTypes = [ "ranking-open", "ranking-women", "rating-open" ]
+    for (let type of pointsTypes) {
+        let filename = `${type}_${version}`
+        if (MainStore.cachedPointsData[filename] !== undefined) {
+            continue
         }
+
+        await Common.fetchEx("GET_POINTS_DATA", {
+            key: filename
+        }, {}, {
+            method: "GET",
+            headers: {
+                "Content-Type": "application/json"
+            }
+        }).then((data) => {
+            if (filename.startsWith("ranking")) {
+                for (let player of data.data) {
+                    player.points = Math.round(player.points)
+                    for (let i = 0; i < MainStore.topRankingResultsCount && i < player.pointsList.length; ++i) {
+                        let resultData = MainStore.resultsData[player.pointsList[i].resultsId]
+                        player[`event${i + 1}`] = `${resultData.eventName}, ${resultData.divisionName}: ${Math.round(player.pointsList[i].points)}`
+                    }
+                }
+
+                MainStore.cachedPointsData[filename] = data.data
+            } else {
+                let rank = 1
+                for (let player of data.data) {
+                    player.rating = Math.round(player.rating)
+                    player.highestRating = Math.round(player.highestRating)
+                    player.rank = rank++
+                }
+
+                MainStore.cachedPointsData[filename] = data.data
+            }
+        }).catch((error) => {
+            console.error(`Failed to download Manifest data: ${error}`)
+        })
     }
 }
 
@@ -183,22 +193,5 @@ module.exports.getSortedEventData = function(startTime, endTime) {
 
     return sortedEventData.sort((a, b) => {
         return Date.parse(a.startDate) - Date.parse(b.startDate)
-    })
-}
-
-module.exports.uploadPointsData = function(endpoint, date, divisionName, data) {
-    Common.fetchEx(endpoint, {
-        date: date,
-        divisionName: divisionName
-    }, {}, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify(data)
-    }).then((response) => {
-        console.log(response)
-    }).catch((error) => {
-        console.error(`Failed to upload: ${error}`)
     })
 }

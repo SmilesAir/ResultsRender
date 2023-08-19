@@ -7,8 +7,8 @@ module.exports = Mobx.observable({
     eventData: {},
     resultsData: {},
     pointsManifest: {},
-    initCount: 0,
-    rankingData: {},
-    ratingData: {},
-    topRankingResultsCount: 8
+    topRankingResultsCount: 8,
+    selectedVersion: null,
+    versions: [],
+    cachedPointsData: {}
 })
